@@ -2,7 +2,12 @@
 import { useEffect, useRef, useState } from "react";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import { FaEraser, FaPalette } from "react-icons/fa";
 import socket from "../utils";
+import getUserId from "../utils/helper";
+
+// Get User ID
+let userId = await getUserId();
 
 export default function Canvas() {
   const canvasRef = useRef(null);
@@ -11,17 +16,18 @@ export default function Canvas() {
   const [size, setSize] = useState(5);
   const [isDrawing, setIsDrawing] = useState(false);
   const [strokes, setStrokes] = useState([]);
-  const [socketId, setSocketId] = useState(null);
+  const strokeBatch = useRef([]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    canvas.width = window.innerWidth * 0.8;
-    canvas.height = window.innerHeight * 0.7;
+    if (!canvas) return;
+
+    canvas.width = window.innerWidth * 0.9;
+    canvas.height = window.innerHeight * 0.6;
     ctxRef.current = canvas.getContext("2d");
 
-    // Store socket ID when connected
     socket.on("connect", () => {
-      setSocketId(socket.id);
+      console.log("Connected to WebSocket server.");
     });
 
     socket.on("load-drawing", (savedStrokes) => {
@@ -29,28 +35,29 @@ export default function Canvas() {
       redrawCanvas(savedStrokes);
     });
 
-    socket.on("draw", (data) => {
-      setStrokes((prevStrokes) => [...prevStrokes, data]);
-      draw(data);
+    socket.on("draw", (dataBatch) => {
+      setStrokes((prevStrokes) => [...prevStrokes, ...dataBatch]);
+      dataBatch.forEach(draw);
     });
 
-    socket.on("reset-user", ({ socketId, updatedStrokes }) => {
-      if (socketId === socketId) {
-        setStrokes((prevStrokes) =>
-          prevStrokes.filter((stroke) => stroke.socketId !== socketId)
-        );
+    // ✅ Fix for Reset Functionality
+    socket.on("reset-user", ({ userId: resetUserId, updatedStrokes }) => {
+      console.log(`Received reset-user event from ${resetUserId}`);
+
+      if (resetUserId === userId) {
+        setStrokes([]);
+        clearCanvas();
       } else {
         setStrokes(updatedStrokes);
+        redrawCanvas(updatedStrokes);
       }
-      redrawCanvas(updatedStrokes);
     });
 
-    socket.on("user-reset", ({ id, message }) => {
-      if (id === socketId) {
-        toast.success(message, { position: "top-right" });
-      } else {
-        toast.info(message, { position: "top-right" });
+    socket.on("user-reset", ({ userId: resetUserId, message, toastType }) => {
+      if (toastType === "success") {
+        return toast.success(message, { position: "top-right" });
       }
+      toast.info(message, { position: "top-right" });
     });
 
     return () => {
@@ -61,17 +68,30 @@ export default function Canvas() {
     };
   }, []);
 
-  const redrawCanvas = (updatedStrokes) => {
+  const clearCanvas = () => {
     const ctx = ctxRef.current;
+    if (!ctx) return;
     ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+  };
+
+  const redrawCanvas = (updatedStrokes) => {
+    clearCanvas();
     updatedStrokes.forEach(draw);
   };
 
   const startDrawing = () => setIsDrawing(true);
-  const stopDrawing = () => setIsDrawing(false);
+
+  const stopDrawing = () => {
+    setIsDrawing(false);
+    if (strokeBatch.current.length > 0) {
+      socket.emit("draw", strokeBatch.current);
+      strokeBatch.current = [];
+    }
+  };
 
   const draw = ({ x, y, color, size }) => {
     const ctx = ctxRef.current;
+    if (!ctx) return;
     ctx.fillStyle = color;
     ctx.beginPath();
     ctx.arc(x, y, size / 2, 0, Math.PI * 2);
@@ -79,67 +99,62 @@ export default function Canvas() {
   };
 
   const handleMouseMove = (e) => {
-    if (!isDrawing) return;
+    if (!isDrawing || !canvasRef.current) return;
     const { offsetX: x, offsetY: y } = e.nativeEvent ?? {};
-    const stroke = {
-      x,
-      y,
-      color,
-      size,
-      socketId,
-    };
 
-    setStrokes((prevStrokes) => [...prevStrokes, stroke]);
+    const stroke = { x, y, color, size, userId };
+    strokeBatch.current.push(stroke);
+
+    if (strokeBatch.current.length >= 5) {
+      socket.emit("draw", strokeBatch.current);
+      strokeBatch.current = [];
+    }
+
     draw(stroke);
-    socket.emit("draw", stroke);
   };
 
   const handleReset = () => {
-    const isCurrentUserEditExistingDrawing = strokes?.some(
-      (stroke) => stroke.socketId === socketId
-    );
-    if (isCurrentUserEditExistingDrawing) {
-      socket.emit("reset", { socketId: socket.id });
+    const hasUserDrawn = strokes.some((stroke) => stroke.userId === userId);
+    if (hasUserDrawn) {
+      console.log(`Sending reset request for user ${userId}`);
+      socket.emit("reset", { userId });
     } else {
-      return toast.error(
-        "You can't reset the drawing as you haven't contributed to it yet.",
-        { position: "top-right" }
-      );
+      toast.error("You haven't contributed yet, so you can't reset it.", {
+        position: "top-right",
+      });
     }
   };
 
   return (
-    <div className="flex flex-col items-center w-full p-6 bg-[#fff] shadow-lg rounded-lg">
+    <div className="flex flex-col items-center w-full p-6 bg-gray-50 rounded-lg">
       <ToastContainer />
-      <h1 className="text-2xl font-bold text-gray-700 mb-4">
-        Real-Time Collaborative Drawing Dashboard 🎨
+      <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-6 text-center">
+        🎨 Real-Time Collaborative Drawing Board
       </h1>
       <canvas
         ref={canvasRef}
-        className="border border-gray-300 rounded shadow-md"
+        className="border-2 border-gray-200 rounded-lg shadow-lg max-w-full"
         onMouseDown={startDrawing}
         onMouseUp={stopDrawing}
         onMouseMove={handleMouseMove}
       />
-      <div className="mt-4 flex  gap-6 justify-center shadow-lg p-4 rounded-lg bg-white w-full  max-w-[50%]">
+
+      {/* Controls */}
+      <div className="mt-6 flex flex-wrap items-center justify-center gap-4 sm:gap-6 p-4 bg-white shadow-md rounded-lg w-full max-w-2xl">
         {/* Color Picker */}
         <div className="flex items-center gap-2">
-          <label className="font-semibold text-gray-700">Color:</label>
-          <div
-            className="w-8 h-8 border rounded-full"
-            style={{ backgroundColor: color }}
-          ></div>
+          <FaPalette className="text-gray-700" />
           <input
             type="color"
             value={color}
             onChange={(e) => setColor(e.target.value)}
-            className="border p-1 rounded cursor-pointer"
+            className="w-8 h-8 border-2 border-gray-200 rounded-full cursor-pointer"
           />
         </div>
 
         {/* Brush Size */}
         <div className="flex items-center gap-2">
-          <label className="font-semibold text-gray-700">Brush Size:</label>
+          <span className="text-gray-700">Size:</span>
           <input
             type="range"
             min="1"
@@ -151,11 +166,11 @@ export default function Canvas() {
           <span className="font-medium text-gray-600">{size}px</span>
         </div>
 
-        {/* Reset Button */}
         <button
           onClick={handleReset}
-          className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition"
+          className="flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition"
         >
+          <FaEraser />
           Reset
         </button>
       </div>
