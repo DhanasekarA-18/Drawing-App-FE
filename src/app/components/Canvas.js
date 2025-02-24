@@ -40,17 +40,9 @@ export default function Canvas() {
       dataBatch.forEach(draw);
     });
 
-    // ✅ Fix for Reset Functionality
     socket.on("reset-user", ({ userId: resetUserId, updatedStrokes }) => {
-      console.log(`Received reset-user event from ${resetUserId}`);
-
-      if (resetUserId === userId) {
-        setStrokes([]);
-        clearCanvas();
-      } else {
-        setStrokes(updatedStrokes);
-        redrawCanvas(updatedStrokes);
-      }
+      setStrokes(updatedStrokes);
+      redrawCanvas(updatedStrokes);
     });
 
     socket.on("user-reset", ({ userId: resetUserId, message, toastType }) => {
@@ -115,11 +107,12 @@ export default function Canvas() {
 
   const handleReset = () => {
     const hasUserDrawn = strokes.some((stroke) => stroke.userId === userId);
+
     if (hasUserDrawn) {
       console.log(`Sending reset request for user ${userId}`);
-      socket.emit("reset", { userId });
+      socket.emit("reset");
     } else {
-      toast.error("You haven't contributed yet, so you can't reset it.", {
+      toast.error("You haven't contributed yet, so you can't reset.", {
         position: "top-right",
       });
     }
