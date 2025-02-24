@@ -16,10 +16,6 @@ export default function Notifications() {
       toast.warn(`User ${userId} has left.`, { position: "top-right" });
     });
 
-    socket.on("welcome", (data) => {
-      console.log(data?.message);
-    });
-
     return () => {
       socket.off("user-joined");
       socket.off("user-left");
