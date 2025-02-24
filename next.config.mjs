@@ -3,7 +3,7 @@ const isProd = process.env.NODE_ENV === "production";
 const nextConfig = {
   env: {
     SOCKET_URL: isProd
-      ? "https://drawing-app-be.vercel.app"
+      ? "https://drawing-app-be-1.onrender.com"
       : "http://localhost:5001",
   },
 };
