@@ -35,8 +35,10 @@ socket.on("disconnect", (reason) => {
   }
 });
 
-if (!window.activeSocket) {
-  window.activeSocket = socket;
+if (typeof window !== "undefined") {
+  if (!window.activeSocket) {
+    window.activeSocket = socket;
+  }
 }
 
 export default socket;
