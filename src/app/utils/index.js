@@ -5,11 +5,12 @@ let userId = await getUserId();
 
 const socketOptions = {
   query: { userId },
+  transports: ["polling", "websocket"], // Prioritize polling
   reconnection: true,
-  reconnectionAttempts: 5,
-  reconnectionDelay: 1000,
-  reconnectionDelayMax: 5000,
-  randomizationFactor: 0.5,
+  reconnectionAttempts: 10, // Try 10 times before failing
+  reconnectionDelay: 2000, // Wait 2s before retrying
+  reconnectionDelayMax: 10000, // Max delay of 10s
+  randomizationFactor: 0.7,
 };
 
 const socket = io(process.env.SOCKET_URL, socketOptions);
