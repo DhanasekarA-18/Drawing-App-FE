@@ -1,7 +1,7 @@
 import { io } from "socket.io-client";
 import getUserId from "./helper";
 
-let userId = await getUserId();
+let userId = getUserId();
 
 const socketOptions = {
   query: { userId },

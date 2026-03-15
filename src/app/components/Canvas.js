@@ -18,8 +18,8 @@ export default function Canvas() {
   const strokeBatch = useRef([]);
 
   useEffect(() => {
-    const init = async () => {
-      const id = await getUserId();
+    const init = () => {
+      const id = getUserId();
       setUserId(id);
     };
     init();
